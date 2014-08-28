@@ -1,4 +1,10 @@
 
+###########################
+# NOTES
+#  1. 2-regime models in JAGS and TMB are generally not converging!
+#  2.  Thus I only recommend using the 1-regime models
+##########################
+
 # File structure
 File = "C:/Users/James.Thorson/Desktop/UW Hideaway/Collaborations/2014 -- Paulik diagram/"
 
@@ -238,18 +244,18 @@ PaulikRegime_Fn = function(){
 }
 
 # MCMC settings
-Nsim = Nburnin = 1e4
-  Nthin = 1e1
+Nsim = Nburnin = 1e5
+  Nthin = 1e2
 
 # Run jags  -- Single regime
 Data = list(N_obs=Results['Obs',,], Nstages=Nstages, Nyears=Nyears, Npred_init=seq(min(Results['Obs',1,],na.rm=TRUE),max(Results['Obs',1,],na.rm=TRUE),length=100), Npred=100 )
-Paulik <- jags(model.file=Paulik_Fn, working.directory=NULL, data=Data, parameters.to.save=c("Alpha","Beta","SigmaM_p","SigmaP","Npred_hat"), n.chains=3, n.thin=Nthin, n.iter=Nsim+Nburnin, n.burnin=Nburnin)
+Paulik <- jags(model.file=Paulik_Fn, working.directory=NULL, data=Data, parameters.to.save=c("Alpha","Beta","SigmaM_p","SigmaP","Npred_hat","N_hat"), n.chains=3, n.thin=Nthin, n.iter=Nsim+Nburnin, n.burnin=Nburnin)
 # Look at estimates
 Paulik$BUGSoutput$summary
 
 # Run jags -- 2-regime
 Data = list(Nregime=2, N_obs=Results['Obs',,], Nstages=Nstages, Nyears=Nyears, Npred_init=seq(min(Results['Obs',1,],na.rm=TRUE),max(Results['Obs',1,],na.rm=TRUE),length=100), Npred=100 )
-PaulikRegime <- jags(model.file=PaulikRegime_Fn, working.directory=NULL, data=Data, parameters.to.save=c("Alpha","Beta","SigmaM_p","SigmaP","Trans_Mat","Regime"), n.chains=3, n.thin=Nthin, n.iter=Nsim+Nburnin, n.burnin=Nburnin)
+PaulikRegime <- jags(model.file=PaulikRegime_Fn, working.directory=NULL, data=Data, parameters.to.save=c("Alpha","Beta","SigmaM_p","SigmaP","Trans_Mat","Regime","N_hat"), n.chains=3, n.thin=Nthin, n.iter=Nsim+Nburnin, n.burnin=Nburnin)
 # Look at estimates                                                                                                                         # "Npred_hat",
 PaulikRegime$BUGSoutput$summary
 
@@ -284,13 +290,13 @@ if(FALSE){
 dev.new()
 Ncol=ceiling(sqrt(Nstages)); Nrow=ceiling(Nstages/Ncol)
 par(mfrow=c(Nrow,Ncol), mar=c(3,3,2,0))
-N_hat = apply( Jags$BUGSoutput$sims.list$N_hat, MARGIN=2:3, FUN=mean)
+N_hat = apply( Paulik$BUGSoutput$sims.list$N_hat, MARGIN=2:3, FUN=mean)
 for(StageI in 1:(Nstages-1)){
   plot( x=N_hat[StageI,], y=N_hat[StageI+1,])
   points( x=N_hat[StageI,], y=N_hat[StageI+1,], col="red")
 }
 
-# Predictive distribution
+# Predictive distribution for spawning biomass (stage 1) and eventual recruits (stage 6)
 png( file=paste(File,"SRcurve_Paulik.png",sep=""), width=6, height=6, res=200, units="in")
   Pred = apply( Paulik$BUGSoutput$sims.list$Npred_hat, MARGIN=2:3, FUN=mean)
   plot( x=Data$Npred_init, y=Pred[6,], type="n", ylim=c(0,quantile(as.vector(Paulik$BUGSoutput$sims.list$Npred_hat[,6,]),prob=0.99)) )
@@ -300,12 +306,13 @@ png( file=paste(File,"SRcurve_Paulik.png",sep=""), width=6, height=6, res=200, u
   }
 dev.off()
 
-# Predictive distribution -- Variance
+# Predictive distribution for variance #1
+#  Predictive distribution showing variance for each stage given that spawning biomass is in 1 of 100 values covering observed range
 pdf( file=paste(File,"SRcurve_Paulik_variance.pdf",sep=""), width=10, height=10, onefile=TRUE)
   par(mfrow=c(4,5), mar=c(2,2,1,0), mgp=c(2,0.5,0.0), tck=-0.02)
   for(p in 1:100){
     Pred = apply( Paulik$BUGSoutput$sims.list$Npred_hat, MARGIN=2:3, FUN=mean)
-    plot( x=1:Nstages, y=Pred[,s], type="n", ylim=quantile(as.vector(Paulik$BUGSoutput$sims.list$Npred_hat[,,]),prob=c(0.001,0.999)), log="y" )
+    plot( x=1:Nstages, y=Pred[,1], type="n", ylim=quantile(as.vector(Paulik$BUGSoutput$sims.list$Npred_hat[,,]),prob=c(0.001,0.999)), log="y" )
     for(s in 1:Nstages){
       lines( x=rep(s,2), y=quantile(Paulik$BUGSoutput$sims.list$Npred_hat[,s,p], prob=c(0.1,0.9)) )
       points( x=s, y=mean(Paulik$BUGSoutput$sims.list$Npred_hat[,s,p]) )
@@ -313,7 +320,8 @@ pdf( file=paste(File,"SRcurve_Paulik_variance.pdf",sep=""), width=10, height=10,
   }
 dev.off()
 
-# Predictive distribution -- Variance
+# Predictive distribution for variance #2
+#  Computed variance for each stage given that spawning biomass is in 1 of 100 values covering observed range
 pdf( file=paste(File,"SRcurve_Paulik_variance_2.pdf",sep=""), width=10, height=10, onefile=TRUE)
   par(mfrow=c(4,5), mar=c(2,2,1,0), mgp=c(2,0.5,0.0), tck=-0.02)
   for(p in 1:100){
